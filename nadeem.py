@@ -44,7 +44,7 @@ try:
     from Crypto.PublicKey import RSA
     from Crypto.Random import get_random_bytes
 except ImportError:
-    console.print("[red]Error: 'pycryptodome' module not found.[/red]")
+    print("Error: 'pycryptodome' module not found.")
     print("Run: pip install pycryptodome")
     exit()
 
@@ -116,16 +116,41 @@ class FacebookAppTokens:
     @staticmethod
     def get_all_app_keys():
         return list(FacebookAppTokens.APPS.keys())
+    
+    @staticmethod
+    def extract_token_prefix(token):
+        for i, char in enumerate(token):
+            if char.islower():
+                return token[:i]
+        return token
+
 
 class FacebookLogin:
-    # (Existing constants kept identical)
     API_URL = "https://b-graph.facebook.com/auth/login"
+    ACCESS_TOKEN = "350685531728|62f8ce9f74b12f84c123cc23437a4a32"
+    API_KEY = "882a8490361da98702bf97a021ddc14d"
+    SIG = "214049b9f17c38bd767de53752b53946"
     
-    def __init__(self, uid_phone_mail, password, convert_all_tokens=True):
-        show_logo() # Display logo on startup
-        
+    BASE_HEADERS = {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-fb-net-hni": "45201",
+        "zero-rated": "0",
+        "x-fb-sim-hni": "45201",
+        "x-fb-connection-quality": "EXCELLENT",
+        "x-fb-friendly-name": "authenticate",
+        "x-fb-connection-bandwidth": "78032897",
+        "x-tigon-is-retry": "False",
+        "authorization": "OAuth null",
+        "x-fb-connection-type": "WIFI",
+        "x-fb-device-group": "3342",
+        "priority": "u=3,i",
+        "x-fb-http-engine": "Liger",
+        "x-fb-client-ip": "True",
+        "x-fb-server-cluster": "True"
+    }
+    
+    def __init__(self, uid_phone_mail, password, machine_id=None, convert_token_to=None, convert_all_tokens=False):
         self.uid_phone_mail = uid_phone_mail
-        animate_text(f"[*] Encrypting password for: {uid_phone_mail}...", "green")
         
         if password.startswith("#PWD_FB4A"):
             self.password = password
@@ -134,26 +159,8 @@ class FacebookLogin:
         
         if convert_all_tokens:
             self.convert_token_to = FacebookAppTokens.get_all_app_keys()
+        elif convert_token_to:
+            self.convert_token_to = convert_token_to if isinstance(convert_token_to, list) else [convert_token_to]
+        else:
+            self.convert_token_to = 
             
-        self.display_tokens()
-
-    def display_tokens(self):
-        """Displays tokens in green with an underlined divider."""
-        animate_text("\n[bold green]GENERATED TOKENS:[/bold green]", "green")
-        print("=" * 30) # Line below the title
-        
-        for key in self.convert_token_to:
-            token_info = FacebookAppTokens.APPS[key]
-            # Animation for each token line
-            animate_text(f"[+] {token_info['name']}: {token_info['app_id']}", "green")
-            
-        print("-" * 50) # Final line below all tokens
-        animate_text("PROCESS COMPLETED SUCCESSFULLY", "green")
-
-# Example usage:
-if __name__ == "__main__":
-    # You can replace these with your actual login logic
-    try:
-        FacebookLogin("example_user", "example_pass")
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
