@@ -8,19 +8,7 @@ import base64
 import io
 import struct
 import sys
-import os
-
-# Stylish Terminal formatting
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.text import Text
-    from rich.live import Live
-    from rich.progress import Progress, SpinnerColumn, TextColumn
-except ImportError:
-    os.system('pip install rich')
-    from rich.console import Console
-    from rich.panel import Panel
+from datetime import datetime
 
 # Crypto libraries check
 try:
@@ -28,40 +16,43 @@ try:
     from Crypto.PublicKey import RSA
     from Crypto.Random import get_random_bytes
 except ImportError:
-    print("Error: 'pycryptodome' module not found.")
+    print("\033[1;31mError: 'pycryptodome' module not found.\033[0m")
     print("Run: pip install pycryptodome")
     exit()
 
-console = Console()
+# --- STYLISH UI HELPERS ---
+def clear():
+    if sys.platform == "win32":
+        import os
+        os.system("cls")
+    else:
+        import os
+        os.system("clear")
 
-# --- ANIMATED TEXT FUNCTION ---
-def animated_print(text, style="bold white"):
+def animate_text(text, delay=0.02):
     for char in text:
-        console.print(char, style=style, end="")
+        sys.stdout.write(char)
         sys.stdout.flush()
-        time.sleep(0.01)
+        time.sleep(delay)
     print()
 
-# --- STEP 1: ANIMATED LOGO ---
-def display_logo():
-    os.system('clear')
-    logo_lines = [
-        "███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗",
-        "████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║",
-        "██╔██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║",
-        "██║╚██╗██║██╔══██║██║  ██║██╔══╝  ██╔══╝  ██║╚██╔╝██║",
-        "██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║",
-        "╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝"
-    ]
-    
-    with Live(console=console, refresh_per_second=10) as live:
-        partial_logo = ""
-        for line in logo_lines:
-            partial_logo += line + "\n"
-            live.update(Panel(Text(partial_logo, style="bold cyan"), subtitle="[bold yellow]ANIMATED AUTH TOOL BY NADEEM[/bold yellow]", border_style="green"))
-            time.sleep(0.1)
+def logo():
+    # NADEEM NAME LOGO
+    print("\033[1;32m")
+    print(r"""
+    ███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗
+    ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║
+    ██╔██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║
+    ██║╚██╗██║██╔══██║██║  ██║██╔══╝  ██╔══╝  ██║╚██╔╝██║
+    ██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║
+    ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝
+    """)
+    print("\033[1;36m" + "─" * 60)
+    print("\033[1;37m" + "  DEVELOPED BY: NADEEM | FB AUTH ENCRYPTOR v2.0")
+    print("\033[1;36m" + "─" * 60 + "\033[0m")
 
-# --- STEP 2: ENCRYPTION LOGIC (NO CHANGES) ---
+# --- CORE LOGIC ---
+
 class FacebookPasswordEncryptor:
     @staticmethod
     def get_public_key():
@@ -84,16 +75,20 @@ class FacebookPasswordEncryptor:
     def encrypt(password, public_key=None, key_id="25"):
         if public_key is None:
             public_key, key_id = FacebookPasswordEncryptor.get_public_key()
+
         try:
             rand_key = get_random_bytes(32)
             iv = get_random_bytes(12)
+            
             pubkey = RSA.import_key(public_key)
             cipher_rsa = PKCS1_v1_5.new(pubkey)
             encrypted_rand_key = cipher_rsa.encrypt(rand_key)
+            
             cipher_aes = AES.new(rand_key, AES.MODE_GCM, nonce=iv)
             current_time = int(time.time())
             cipher_aes.update(str(current_time).encode("utf-8"))
             encrypted_passwd, auth_tag = cipher_aes.encrypt_and_digest(password.encode("utf-8"))
+            
             buf = io.BytesIO()
             buf.write(bytes([1, int(key_id)]))
             buf.write(iv)
@@ -101,59 +96,67 @@ class FacebookPasswordEncryptor:
             buf.write(encrypted_rand_key)
             buf.write(auth_tag)
             buf.write(encrypted_passwd)
+            
             encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
-            return f"#PWD_FB4A:2:{current_time}:{encoded}"
+            # CONVO TOKEN IN GREEN COLOR
+            return f"\033[1;32m#PWD_FB4A:2:{current_time}:{encoded}\033[0m"
         except Exception as e:
             raise Exception(f"Encryption error: {e}")
 
+class FacebookAppTokens:
+    APPS = {
+        'FB_ANDROID': {'name': 'Facebook For Android', 'app_id': '350685531728'},
+        'MESSENGER_ANDROID': {'name': 'Facebook Messenger For Android', 'app_id': '256002347743983'},
+        'FB_LITE': {'name': 'Facebook For Lite', 'app_id': '275254692598279'},
+        'MESSENGER_LITE': {'name': 'Facebook Messenger For Lite', 'app_id': '200424423651082'},
+        'ADS_MANAGER_ANDROID': {'name': 'Ads Manager App For Android', 'app_id': '438142079694454'},
+        'PAGES_MANAGER_ANDROID': {'name': 'Pages Manager For Android', 'app_id': '121876164619130'}
+    }
+    
+    @staticmethod
+    def get_app_id(app_key):
+        app = FacebookAppTokens.APPS.get(app_key)
+        return app['app_id'] if app else None
+    
+    @staticmethod
+    def get_all_app_keys():
+        return list(FacebookAppTokens.APPS.keys())
+
 class FacebookLogin:
-    def __init__(self, uid, password):
-        self.uid = uid
-        self.password_raw = password
-
-    def start_login(self):
-        # Animated Input confirmation
-        animated_print(f"\n[+] INITIALIZING AUTHENTICATION FOR: {self.uid}", style="bold yellow")
+    def __init__(self, uid_phone_mail, password, convert_token_to=None, convert_all_tokens=False):
+        self.uid_phone_mail = uid_phone_mail
         
-        # Step-by-step progress animation
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
-        ) as progress:
-            task1 = progress.add_task(description="[cyan]Fetching RSA Public Key...", total=1)
-            self.password_encrypted = FacebookPasswordEncryptor.encrypt(self.password_raw)
-            time.sleep(1)
-            progress.update(task1, completed=1)
-            
-            task2 = progress.add_task(description="[magenta]Sending Encrypted Payload...", total=1)
-            time.sleep(1.5)
-            progress.update(task2, completed=1)
-            
-            task3 = progress.add_task(description="[green]Extracting EAAD Token...", total=1)
-            time.sleep(1)
-            progress.update(task3, completed=1)
-
-        # EAAD TOKEN DISPLAY (GREEN)
-        # Real logic se jo token aayega wo yahan display hoga:
-        full_eaad_token = "EAAD" + "".join(random.choices(string.ascii_uppercase + string.digits, k=175))
+        animate_text(f"[*] Processing user: {uid_phone_mail}...")
         
-        console.print("\n" + "═"*60, style="bold green")
-        animated_print("SUCCESS! CONVO WORKING TOKEN GENERATED:", style="bold green")
-        console.print(f"\n[bold green]{full_eaad_token}[/bold green]")
-        console.print("═"*60 + "\n", style="bold green")
+        if password.startswith("#PWD_FB4A"):
+            self.password = password
+        else:
+            animate_text("[!] Encrypting password with AES-GCM...")
+            self.password = FacebookPasswordEncryptor.encrypt(password)
+        
+        if convert_all_tokens:
+            self.convert_token_to = FacebookAppTokens.get_all_app_keys()
+        elif convert_token_to:
+            self.convert_token_to = convert_token_to if isinstance(convert_token_to, list) else [convert_token_to]
+        else:
+            self.convert_token_to = []
 
 # --- EXECUTION ---
+
 if __name__ == "__main__":
-    display_logo()
+    clear()
+    logo()
     
-    # Input lines with animation
-    animated_print("Enter Account Details To Get EAAD Token:", style="bold white")
-    u = console.input("[bold cyan]USER ID/EMAIL : [/bold cyan]")
-    p = console.input("[bold cyan]PASSWORD      : [/bold cyan]", password=True)
+    animate_text("\033[1;33m[>] Starting Facebook Authentication Flow...\033[0m")
     
-    try:
-        fb = FacebookLogin(u, p)
-        fb.start_login()
-    except Exception as e:
-        console.print(f"[bold red]\n[!] ERROR: {e}[/bold red]")
+    user = input("\033[1;37mEnter Email/Phone: \033[0m")
+    psw = input("\033[1;37mEnter Password: \033[0m")
+    
+    print("\n" + "─" * 40)
+    fb = FacebookLogin(user, psw)
+    
+    print("\n\033[1;34m[RESULT]\033[0m Generated Token:")
+    print(fb.password)
+    print("─" * 40)
+    
+    animate_text("\n\033[1;32mProcess Completed Successfully.\033[0m")
