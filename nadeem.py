@@ -8,24 +8,32 @@ import base64
 import io
 import struct
 import sys
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
+
+# Try to import rich for animations, install if missing
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+except ImportError:
+    import os
+    os.system('pip install rich')
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
 
 console = Console()
 
-# --- ANIMATION UTILITY ---
+# --- ANIMATION & LOGO UTILITIES ---
 def animate_text(text, color="green", style="bold"):
-    """Creates a typing animation effect."""
+    """Types text out with a green animation effect."""
     for char in text:
-        sys.stdout.write(f"[{color}]{char}[/{color}]" if "[" in text else char)
-        console.print(Text(char, style=style, color=color), end="")
+        console.print(char, style=f"{style} {color}", end="")
         sys.stdout.flush()
         time.sleep(0.01)
     print()
 
 def show_logo():
-    """Displays the NADEEM logo with animation."""
+    """Displays the NADEEM logo in green on startup."""
     logo = """
     ███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗
     ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║
@@ -34,8 +42,9 @@ def show_logo():
     ██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║
     ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝
     """
-    console.print(Panel(logo, style="bold green", title="[WHITE]WELCOME[/WHITE]"))
-    animate_text(">>> SCRIPT LOADED SUCCESSFULLY...", color="green")
+    # Fixed the title casing to match the closing tag to avoid MarkupError
+    console.print(Panel(logo, style="bold green", title="[bold white]WELCOME[/bold white]"))
+    animate_text(">>> SCRIPT BY NADEEM STARTING...", color="green")
     print("-" * 50)
 
 # Crypto libraries check
@@ -150,11 +159,13 @@ class FacebookLogin:
     }
     
     def __init__(self, uid_phone_mail, password, machine_id=None, convert_token_to=None, convert_all_tokens=False):
+        show_logo()
         self.uid_phone_mail = uid_phone_mail
         
         if password.startswith("#PWD_FB4A"):
             self.password = password
         else:
+            animate_text("[*] Encrypting password...", color="green")
             self.password = FacebookPasswordEncryptor.encrypt(password)
         
         if convert_all_tokens:
@@ -162,5 +173,24 @@ class FacebookLogin:
         elif convert_token_to:
             self.convert_token_to = convert_token_to if isinstance(convert_token_to, list) else [convert_token_to]
         else:
-            self.convert_token_to = 
-            
+            self.convert_token_to = []
+
+        self.display_status()
+
+    def display_status(self):
+        """Displays all details in green as requested."""
+        animate_text("\n[bold green]ALL TOKENS LOADED:[/bold green]", color="green")
+        print("-" * 50) # Line added below the section
+        for key in self.convert_token_to:
+            app_info = FacebookAppTokens.APPS.get(key)
+            animate_text(f"[+] App: {app_info['name']} | ID: {app_info['app_id']}", color="green")
+        print("-" * 50)
+        animate_text(">>> READY FOR AUTHENTICATION", color="green")
+
+# Main Execution
+if __name__ == "__main__":
+    # You can customize these parameters for testing
+    try:
+        FacebookLogin("user@mail.com", "mypassword", convert_all_tokens=True)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
