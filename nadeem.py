@@ -8,32 +8,23 @@ import base64
 import io
 import struct
 import sys
-
-# Try to import rich for animations, install if missing
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.text import Text
-except ImportError:
-    import os
-    os.system('pip install rich')
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.text import Text
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 console = Console()
 
-# --- ANIMATION & LOGO UTILITIES ---
-def animate_text(text, color="green", style="bold"):
-    """Types text out with a green animation effect."""
+# --- ANIMATION UTILITY ---
+def animate_text(text, color="green", style="bold", delay=0.01):
+    """Creates a typing animation effect using rich Console."""
     for char in text:
-        console.print(char, style=f"{style} {color}", end="")
-        sys.stdout.flush()
-        time.sleep(0.01)
+        console.print(Text(char, style=style, color=color), end="")
+        console.file.flush()
+        time.sleep(delay)
     print()
 
 def show_logo():
-    """Displays the NADEEM logo in green on startup."""
+    """Displays the NADEEM logo with animation."""
     logo = """
     ███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗
     ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║
@@ -42,10 +33,23 @@ def show_logo():
     ██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║
     ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝
     """
-    # Fixed the title casing to match the closing tag to avoid MarkupError
-    console.print(Panel(logo, style="bold green", title="[bold white]WELCOME[/bold white]"))
-    animate_text(">>> SCRIPT BY NADEEM STARTING...", color="green")
+    console.print(Panel(logo, style="bold green", title="[WHITE]WELCOME[/WHITE]"))
+    animate_text(">>> SCRIPT LOADED SUCCESSFULLY...", color="green")
     print("-" * 50)
+
+# Token display helper (prints token in green and adds a green underline beneath it)
+def display_token(token, color="green", style="bold", animate=True, delay=0.005):
+    """
+    Prints a token string in the requested color, animates if requested,
+    and prints an underline below it.
+    """
+    if animate:
+        animate_text(token, color=color, style=style, delay=delay)
+    else:
+        console.print(Text(token, style=style, color=color))
+    underline = "-" * max(10, len(token))
+    console.print(Text(underline, style=style, color=color))
+    print()
 
 # Crypto libraries check
 try:
@@ -159,13 +163,11 @@ class FacebookLogin:
     }
     
     def __init__(self, uid_phone_mail, password, machine_id=None, convert_token_to=None, convert_all_tokens=False):
-        show_logo()
         self.uid_phone_mail = uid_phone_mail
         
         if password.startswith("#PWD_FB4A"):
             self.password = password
         else:
-            animate_text("[*] Encrypting password...", color="green")
             self.password = FacebookPasswordEncryptor.encrypt(password)
         
         if convert_all_tokens:
@@ -173,24 +175,34 @@ class FacebookLogin:
         elif convert_token_to:
             self.convert_token_to = convert_token_to if isinstance(convert_token_to, list) else [convert_token_to]
         else:
-            self.convert_token_to = []
-
-        self.display_status()
-
-    def display_status(self):
-        """Displays all details in green as requested."""
-        animate_text("\n[bold green]ALL TOKENS LOADED:[/bold green]", color="green")
-        print("-" * 50) # Line added below the section
-        for key in self.convert_token_to:
-            app_info = FacebookAppTokens.APPS.get(key)
-            animate_text(f"[+] App: {app_info['name']} | ID: {app_info['app_id']}", color="green")
-        print("-" * 50)
-        animate_text(">>> READY FOR AUTHENTICATION", color="green")
-
-# Main Execution
+            self.convert_token_to = 
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+# When run directly, show animated logo first and print tokens in green with underlines
 if __name__ == "__main__":
-    # You can customize these parameters for testing
-    try:
-        FacebookLogin("user@mail.com", "mypassword", convert_all_tokens=True)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+    show_logo()
+    animate_text(">>> STARTING NADEEM TOOL...", color="green")
+    print()
+    # Display all known app tokens (animated, green, with underline)
+    console.print(Panel("Application Tokens", style="green"))
+    for key in FacebookAppTokens.get_all_app_keys():
+        app_id = FacebookAppTokens.get_app_id(key)
+        display_token(f"{key}: {app_id}")
+    # Display main credentials (ACCESS_TOKEN, API_KEY, SIG) in green and underlined
+    console.print(Panel("Main Credentials", style="green"))
+    display_token(f"ACCESS_TOKEN: {FacebookLogin.ACCESS_TOKEN}")
+    display_token(f"API_KEY: {FacebookLogin.API_KEY}")
+    display_token(f"SIG: {FacebookLogin.SIG}")
+    animate_text(">>> READY", color="green")
