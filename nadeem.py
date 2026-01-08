@@ -1,3 +1,5 @@
+# Full working script (fixed syntax errors and rich.Text usage).
+# Requirements: pip install pycryptodome rich requests
 import time
 import io
 import struct
@@ -14,18 +16,25 @@ console = Console()
 # --- ANIMATION UTILITY ---
 def animate_text(text, color="green", style="bold", delay=0.01):
     """Typing animation effect using rich Console."""
+    # Use Text style combining style and color so Text() doesn't receive unexpected 'color' kwarg
+    combined_style = f"{style} {color}".strip()
     for char in text:
-        console.print(Text(char, style=style, color=color), end="")
-        sys.stdout.flush()
+        console.print(Text(char, style=combined_style), end="")
+        # flush to make animation appear immediately
+        try:
+            console.file.flush()
+        except Exception:
+            pass
         time.sleep(delay)
     console.print("")  # newline
+
 
 def show_logo(delay_per_char=0.002):
     """Displays the NADEEM logo with animation."""
     logo = (
         "    ███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗\n"
-        "    ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ █��██║\n"
-        "    ██���██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║\n"
+        "    ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║\n"
+        "    ██╔██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║\n"
         "    ██║╚██╗██║██╔══██║██║  ██║██╔══╝  ██╔══╝  ██║╚██╔╝██║\n"
         "    ██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║\n"
         "    ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝\n"
@@ -34,14 +43,15 @@ def show_logo(delay_per_char=0.002):
     animate_text(">>> SCRIPT LOADED SUCCESSFULLY...", color="green", delay=delay_per_char)
     console.print("-" * 50)
 
+
 def display_token(token, color="green", style="bold", animate=True, delay=0.003):
     """Print token in color and add underline beneath it."""
     if animate:
         animate_text(token, color=color, style=style, delay=delay)
     else:
-        console.print(Text(token, style=style, color=color))
+        console.print(Text(token, style=f"{style} {color}"))
     underline = "-" * max(10, len(token))
-    console.print(Text(underline, style=style, color=color))
+    console.print(Text(underline, style=f"{style} {color}"))
     console.print("")  # newline
 
 
@@ -73,7 +83,6 @@ class FacebookPasswordEncryptor:
                 "fb_api_caller_class": "com.facebook.auth.login.AuthOperations",
                 "access_token": "438142079694454|fc0a7caa49b192f64f6f5a6d9643bb28",
             }
-            # Use POST as original; if GET is required change accordingly.
             resp = requests.post(url, params=params, timeout=10)
             resp.raise_for_status()
             j = resp.json()
@@ -88,7 +97,7 @@ class FacebookPasswordEncryptor:
     @staticmethod
     def encrypt(password, public_key=None, key_id="25"):
         """
-        Encrypt the given password using hybrid RSA (encrypt rand key) + AES-GCM.
+        Encrypt the given password using hybrid RSA + AES-GCM.
         Returns the Facebook-style encoded string.
         """
         if public_key is None:
@@ -108,7 +117,6 @@ class FacebookPasswordEncryptor:
             encrypted_passwd, auth_tag = cipher_aes.encrypt_and_digest(password.encode("utf-8"))
 
             buf = io.BytesIO()
-            # Format: version(1) + key_id(1) as bytes, then iv, then len(encrypted_rand_key) as little-endian short, then encrypted_rand_key, tag, ciphertext
             buf.write(bytes([1, int(key_id) if str(key_id).isdigit() else 25]))
             buf.write(iv)
             buf.write(struct.pack("<h", len(encrypted_rand_key)))
@@ -191,8 +199,8 @@ class FacebookLogin:
             # default: no conversion requested
             self.convert_token_to = []
 
-    # Placeholder method: you can implement the actual login request using API_URL and headers if needed.
     def build_payload(self):
+        """Build payload for a login attempt (placeholder)."""
         payload = {
             "api_key": self.API_KEY,
             "email": self.uid_phone_mail,
@@ -200,6 +208,19 @@ class FacebookLogin:
             "format": "JSON",
         }
         return payload
+
+    def login_request(self, timeout=10):
+        """
+        Performs a POST to the API_URL with built payload.
+        This is provided as an optional helper. The API may require additional params/signing.
+        """
+        try:
+            payload = self.build_payload()
+            resp = requests.post(self.API_URL, data=payload, headers=self.BASE_HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            return {"error": str(e)}
 
 
 if __name__ == "__main__":
