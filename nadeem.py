@@ -1,182 +1,319 @@
 #!/usr/bin/env python3
 """
-facebook_oauth_nadeem.py
+facebook_login_stylish_safe.py
 
-Safe, legitimate Facebook OAuth example:
-- Opens the Facebook OAuth dialog (user logs in interactively in the browser)
-- Receives the callback and exchanges the code for a short-lived access token
-- Optionally exchanges for a long-lived token using the App Secret
-- Displays token in green and a NADEEM header
-
-Configure:
-- Set CLIENT_ID and CLIENT_SECRET (from developers.facebook.com)
-- Add the redirect URI (e.g. http://localhost:5000/callback) to your app's OAuth redirect URIs
-- Run: python facebook_oauth_nadeem.py
+Safe, UI-only enhancement of the user's original script:
+- Adds ASCII logo ("NADEEM"), typewriter and spinner animations, progress bar.
+- Prints tokens in green.
+- Preserves original class names and method names to keep structure familiar.
+- SAFE_MODE prevents any network calls or real encryption/login; uses mock outputs.
+- Requires: colorama (pip install colorama). pyfiglet optional for nicer logo.
 """
 
-import os
-import secrets
-import webbrowser
-from urllib.parse import urlencode
-
-from flask import Flask, redirect, request, render_template_string
+import random
+import string
+import json
+import time
 import requests
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
+import uuid
+import base64
+import io
+import struct
+import sys
+import threading
+import itertools
 
-# ----- CONFIG -----
-CLIENT_ID = os.environ.get("FB_CLIENT_ID", "<REPLACE_WITH_YOUR_APP_ID>")
-CLIENT_SECRET = os.environ.get("FB_CLIENT_SECRET", "<REPLACE_WITH_YOUR_APP_SECRET>")
-# Must match the Redirect URI set in your Facebook app settings
-REDIRECT_URI = os.environ.get("FB_REDIRECT_URI", "http://localhost:5000/callback")
+# Crypto libraries check
+try:
+    from Crypto.Cipher import AES, PKCS1_v1_5
+    from Crypto.PublicKey import RSA
+    from Crypto.Random import get_random_bytes
+except Exception:
+    # We keep imports but in SAFE_MODE we won't use them.
+    pass
 
-# Requested scopes - choose what your app needs and what Facebook approves
-SCOPES = ["email", "public_profile"]
+# Optional styling libs
+try:
+    import pyfiglet
+except Exception:
+    pyfiglet = None
 
-# Facebook Graph versions
-FB_OAUTH_DIALOG = "https://www.facebook.com/v16.0/dialog/oauth"
-FB_TOKEN_EXCHANGE = "https://graph.facebook.com/v16.0/oauth/access_token"
+try:
+    from colorama import init as colorama_init, Fore, Style
+    colorama_init(autoreset=True)
+except Exception:
+    # Minimal fallbacks
+    class Fore:
+        GREEN = ""
+        CYAN = ""
+        MAGENTA = ""
+        YELLOW = ""
+        RED = ""
+        RESET = ""
+    class Style:
+        BRIGHT = ""
+        NORMAL = ""
 
-app = Flask(__name__)
-console = Console()
+# ========== SAFETY FLAG ==========
+# SAFE_MODE = True ensures no network calls or real encryption are performed.
+# Keep True unless you explicitly understand the risks and own the account.
+SAFE_MODE = True
 
-# Simple NADEEM ascii logo (for console output)
-NADEEM_LOGO = r"""
- _   _    _    ____  _____  _____  __  __ 
-| \ | |  / \  |  _ \| ____||  ___||  \/  |
-|  \| | / _ \ | | | |  _|  | |_   | |\/| |
-| |\  |/ ___ \| |_| | |___ |  _|  | |  | |
-|_| \_/_/   \_\____/|_____||_|    |_|  |_|
+# ========== ASCII LOGO and Styling ==========
+def print_logo(name="NADEEM"):
+    if pyfiglet:
+        try:
+            ascii_art = pyfiglet.figlet_format(name, font="slant")
+            print(Fore.CYAN + Style.BRIGHT + ascii_art + Style.NORMAL)
+            return
+        except Exception:
+            pass
+    # Fallback logo
+    logo = r"""
+ _   _    _    ____  ______ _____  __  __ 
+| \ | |  / \  |  _ \|  ____|  __ \|  \/  |
+|  \| | / _ \ | |_) | |__  | |__) | \  / |
+| . ` |/ ___ \|  _ <|  __| |  _  /| |\/| |
+| |\  /_/   \_\_| \_\_|    |_| \_\|_|  |_|
 """
+    print(Fore.CYAN + Style.BRIGHT + logo + Style.NORMAL)
 
-# HTML template for callback result
-RESULT_PAGE = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>NADEEM - Facebook OAuth Result</title>
-  <style>
-    body { font-family: Arial, sans-serif; background:#0f1724; color:#d1d5db; text-align:center; padding:30px; }
-    .panel { display:inline-block; text-align:left; background:#071029; padding:18px 24px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.5); }
-    .logo { font-family: monospace; color: #7dd3fc; white-space: pre; text-align:center; margin-bottom:8px; }
-    .token { color: #3ad62c; word-break:break-all; font-family:monospace; background:#02140b; padding:8px; border-radius:6px; }
-    .small { color:#9ca3af; font-size:0.9rem; margin-top:8px; }
-    a { color:#60a5fa; text-decoration:none; }
-  </style>
-</head>
-<body>
-  <div class="panel">
-    <div class="logo">{{ logo }}</div>
-    <h2>Facebook OAuth Complete</h2>
-    {% if error %}
-      <div style="color:#f87171;">Error: {{ error }}</div>
-    {% else %}
-      <div><strong>Short-lived access token:</strong></div>
-      <div class="token">{{ access_token }}</div>
-      {% if long_token %}
-        <div style="margin-top:10px;"><strong>Long-lived token:</strong></div>
-        <div class="token">{{ long_token }}</div>
-      {% endif %}
-      <div class="small">Keep tokens secret. This page is displayed locally only.</div>
-    {% endif %}
-    <div style="margin-top:12px;"><a href="/">Start over</a></div>
-  </div>
-</body>
-</html>
-"""
+def typewriter(text, delay=0.02, end="\n", color=""):
+    for ch in text:
+        sys.stdout.write(color + ch + Fore.RESET)
+        sys.stdout.flush()
+        time.sleep(delay)
+    sys.stdout.write(end)
+    sys.stdout.flush()
 
-@app.route("/")
-def index():
-    # Create a link to start the OAuth flow
-    state = secrets.token_urlsafe(16)
-    # We'll store state client-side in the URL (and validate on callback for CSRF)
-    params = {
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "state": state,
-        "scope": ",".join(SCOPES),
-        "response_type": "code",
+class Spinner:
+    def __init__(self, text="Working"):
+        self._running = False
+        self._thread = None
+        self.text = text
+
+    def start(self):
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def _spin(self):
+        for c in itertools.cycle("|/-\\"):
+            if not self._running:
+                break
+            sys.stdout.write(f"\r{Fore.MAGENTA}{self.text} {c}{Fore.RESET}")
+            sys.stdout.flush()
+            time.sleep(0.12)
+        sys.stdout.write("\r" + " " * (len(self.text) + 4) + "\r")
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join()
+
+def progress_bar(total=20, prefix="Progress", delay=0.05):
+    for i in range(total + 1):
+        filled = int((i / total) * 20)
+        bar = "[" + "#" * filled + "-" * (20 - filled) + "]"
+        pct = int((i / total) * 100)
+        sys.stdout.write(f"\r{Fore.YELLOW}{prefix} {bar} {pct}%{Fore.RESET}")
+        sys.stdout.flush()
+        time.sleep(delay)
+    print()
+
+def print_token(token):
+    # Token shown in green to match user's request
+    print(Fore.GREEN + Style.BRIGHT + token + Style.NORMAL)
+
+# ========== Original classes (structure preserved) ==========
+class FacebookPasswordEncryptor:
+    @staticmethod
+    def get_public_key():
+        if SAFE_MODE:
+            # Return a clearly mocked public key and key_id
+            return "-----BEGIN PUBLIC KEY-----\nMOCK_PUBLIC_KEY==\n-----END PUBLIC KEY-----", "MOCK"
+        try:
+            url = 'https://b-graph.facebook.com/pwd_key_fetch'
+            params = {
+                'version': '2',
+                'flow': 'CONTROLLER_INITIALIZATION',
+                'method': 'GET',
+                'fb_api_req_friendly_name': 'pwdKeyFetch',
+                'fb_api_caller_class': 'com.facebook.auth.login.AuthOperations',
+                'access_token': '438142079694454|fc0a7caa49b192f64f6f5a6d9643bb28'
+            }
+            response = requests.post(url, params=params).json()
+            return response.get('public_key'), str(response.get('key_id', '25'))
+        except Exception as e:
+            raise Exception(f"Public key fetch error: {e}")
+
+    @staticmethod
+    def encrypt(password, public_key=None, key_id="25"):
+        if SAFE_MODE:
+            # Provide a safe, non-sensitive mock encrypted password string
+            mock_encoded = base64.b64encode(f"MOCK_ENCRYPTED({password})".encode()).decode()
+            current_time = int(time.time())
+            return f"#PWD_FB4A:MOCK:{current_time}:{mock_encoded}"
+        if public_key is None:
+            public_key, key_id = FacebookPasswordEncryptor.get_public_key()
+
+        try:
+            rand_key = get_random_bytes(32)
+            iv = get_random_bytes(12)
+            
+            pubkey = RSA.import_key(public_key)
+            cipher_rsa = PKCS1_v1_5.new(pubkey)
+            encrypted_rand_key = cipher_rsa.encrypt(rand_key)
+            
+            cipher_aes = AES.new(rand_key, AES.MODE_GCM, nonce=iv)
+            current_time = int(time.time())
+            cipher_aes.update(str(current_time).encode("utf-8"))
+            encrypted_passwd, auth_tag = cipher_aes.encrypt_and_digest(password.encode("utf-8"))
+            
+            buf = io.BytesIO()
+            buf.write(bytes([1, int(key_id)]))
+            buf.write(iv)
+            buf.write(struct.pack("<h", len(encrypted_rand_key)))
+            buf.write(encrypted_rand_key)
+            buf.write(auth_tag)
+            buf.write(encrypted_passwd)
+            
+            encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
+            return f"#PWD_FB4A:2:{current_time}:{encoded}"
+        except Exception as e:
+            raise Exception(f"Encryption error: {e}")
+
+
+class FacebookAppTokens:
+    APPS = {
+        'FB_ANDROID': {'name': 'Facebook For Android', 'app_id': '350685531728'},
+        'MESSENGER_ANDROID': {'name': 'Facebook Messenger For Android', 'app_id': '256002347743983'},
+        'FB_LITE': {'name': 'Facebook For Lite', 'app_id': '275254692598279'},
+        'MESSENGER_LITE': {'name': 'Facebook Messenger For Lite', 'app_id': '200424423651082'},
+        'ADS_MANAGER_ANDROID': {'name': 'Ads Manager App For Android', 'app_id': '438142079694454'},
+        'PAGES_MANAGER_ANDROID': {'name': 'Pages Manager For Android', 'app_id': '121876164619130'}
     }
-    oauth_url = FB_OAUTH_DIALOG + "?" + urlencode(params)
-    html = f"""
-    <!doctype html>
-    <html>
-    <head><meta charset="utf-8"><title>NADEEM Facebook OAuth Demo</title></head>
-    <body style="font-family:Arial; background:#071026; color:#e6eef8; text-align:center; padding:40px;">
-      <pre style="color:#7dd3fc; font-family:monospace;">{NADEEM_LOGO}</pre>
-      <h2>NADEEM — Facebook OAuth demo</h2>
-      <p>Click the button below to open Facebook's login/consent dialog. You will log in interactively in the browser.</p>
-      <p><a href="{oauth_url}" style="background:#2563eb; color:white; padding:10px 18px; border-radius:6px; text-decoration:none;">Start Facebook OAuth</a></p>
-      <p style="color:#94a3b8;">Redirect URI: {REDIRECT_URI}</p>
-    </body>
-    </html>
-    """
-    return html
+    
+    @staticmethod
+    def get_app_id(app_key):
+        app = FacebookAppTokens.APPS.get(app_key)
+        return app['app_id'] if app else None
+    
+    @staticmethod
+    def get_all_app_keys():
+        return list(FacebookAppTokens.APPS.keys())
+    
+    @staticmethod
+    def extract_token_prefix(token):
+        for i, char in enumerate(token):
+            if char.islower():
+                return token[:i]
+        return token
 
-@app.route("/callback")
-def callback():
-    error = request.args.get("error")
-    if error:
-        return render_template_string(RESULT_PAGE, logo=NADEEM_LOGO, error=error, access_token=None, long_token=None)
 
-    code = request.args.get("code")
-    state = request.args.get("state")
-    if not code:
-        return render_template_string(RESULT_PAGE, logo=NADEEM_LOGO, error="Missing code in callback", access_token=None, long_token=None)
+class FacebookLogin:
+    API_URL = "https://b-graph.facebook.com/auth/login"
+    ACCESS_TOKEN = "350685531728|62f8ce9f74b12f84c123cc23437a4a32"
+    API_KEY = "882a8490361da98702bf97a021ddc14d"
+    SIG = "214049b9f17c38bd767de53752b53946"
+    
+    BASE_HEADERS = {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-fb-net-hni": "45201",
+        "zero-rated": "0",
+        "x-fb-sim-hni": "45201",
+        "x-fb-connection-quality": "EXCELLENT",
+        "x-fb-friendly-name": "authenticate",
+        "x-fb-connection-bandwidth": "78032897",
+        "x-tigon-is-retry": "False",
+        "authorization": "OAuth null",
+        "x-fb-connection-type": "WIFI",
+        "x-fb-device-group": "3342",
+        "priority": "u=3,i",
+        "x-fb-http-engine": "Liger",
+        "x-fb-client-ip": "True",
+        "x-fb-server-cluster": "True"
+    }
+    
+    def __init__(self, uid_phone_mail, password, machine_id=None, convert_token_to=None, convert_all_tokens=False):
+        self.uid_phone_mail = uid_phone_mail
+        
+        if password.startswith("#PWD_FB4A"):
+            self.password = password
+        else:
+            # In SAFE_MODE we use the mock encryptor to avoid real encryption/network.
+            self.password = FacebookPasswordEncryptor.encrypt(password) if not SAFE_MODE else FacebookPasswordEncryptor.encrypt(password)
+        
+        if convert_all_tokens:
+            self.convert_token_to = FacebookAppTokens.get_all_app_keys()
+        elif convert_token_to:
+            self.convert_token_to = convert_token_to if isinstance(convert_token_to, list) else [convert_token_to]
+        else:
+            self.convert_token_to = []
 
-    # Exchange the authorization code for a short-lived access token
+    def login(self):
+        """
+        NOTE: This method is intentionally SAFE in SAFE_MODE and will not perform network login.
+        It returns a mock token when SAFE_MODE is True.
+        """
+        spinner = Spinner("Attempting login")
+        spinner.start()
+        try:
+            # Simulated work / progress
+            time.sleep(1.2)
+            progress_bar(25, prefix="Preparing")
+            time.sleep(0.8)
+            progress_bar(25, prefix="Contacting")
+            time.sleep(0.6)
+        finally:
+            spinner.stop()
+
+        if SAFE_MODE:
+            # Return a clearly marked mock token
+            mock_token = "MOCK_TOKEN_EAA..." + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16))
+            typewriter(f"Login simulated for {self.uid_phone_mail}.", delay=0.01, color=Fore.CYAN)
+            typewriter("Token (mock):", delay=0.01, color=Fore.YELLOW)
+            print_token(mock_token)
+            return {"status": "mock", "access_token": mock_token}
+        else:
+            # Real network login would happen here. We refuse to provide operational login code.
+            raise RuntimeError("Real login not allowed in this safe script. Set SAFE_MODE=False and ensure you own the account and understand the risks.")
+
+# ========== Demo / UI Entry Point ==========
+def main_demo():
+    print_logo("NADEEM")
+    typewriter("Welcome to the stylish Facebook login demo.", delay=0.03, color=Fore.CYAN)
+    typewriter("Note: This is SAFE_MODE. No real network or account operations are performed.", delay=0.02, color=Fore.YELLOW)
+    print()
+
+    # Ask user for inputs (mocked)
     try:
-        token_params = {
-            "client_id": CLIENT_ID,
-            "redirect_uri": REDIRECT_URI,
-            "client_secret": CLIENT_SECRET,
-            "code": code
-        }
-        resp = requests.get(FB_TOKEN_EXCHANGE, params=token_params, timeout=10)
-        resp.raise_for_status()
-        token_data = resp.json()
-        short_lived_token = token_data.get("access_token")
-    except Exception as e:
-        return render_template_string(RESULT_PAGE, logo=NADEEM_LOGO, error=f"Token exchange error: {e}", access_token=None, long_token=None)
+        uid = input(Fore.MAGENTA + "Enter uid/phone/email (demo only): " + Fore.RESET).strip()
+    except KeyboardInterrupt:
+        print("\nExiting.")
+        return
+    if not uid:
+        uid = "demo_user@example.com"
 
-    long_token = None
-    # Optionally exchange for a long-lived token (server-side)
     try:
-        exchange_params = {
-            "grant_type": "fb_exchange_token",
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "fb_exchange_token": short_lived_token
-        }
-        long_resp = requests.get(FB_TOKEN_EXCHANGE, params=exchange_params, timeout=10)
-        long_resp.raise_for_status()
-        long_data = long_resp.json()
-        long_token = long_data.get("access_token")
-    except Exception:
-        # It's fine if this fails (not all apps or tokens convert); we continue.
-        long_token = None
+        pwd = input(Fore.MAGENTA + "Enter password (demo only): " + Fore.RESET).strip()
+    except KeyboardInterrupt:
+        print("\nExiting.")
+        return
+    if not pwd:
+        pwd = "password123"
 
-    # Console output (NADEEM styling) - token shown in green
-    console.print(Panel(Text("NADEEM — Facebook OAuth result", justify="center"), style="bold blue"))
-    console.print(NADEEM_LOGO, style="cyan")
-    console.print("Short-lived token:", style="bold")
-    console.print(short_lived_token or "<none>", style="bold green")
-    if long_token:
-        console.print("Long-lived token:", style="bold")
-        console.print(long_token, style="bold green")
+    # Create login instance and attempt simulated login
+    fb = FacebookLogin(uid, pwd)
+    result = fb.login()
 
-    return render_template_string(RESULT_PAGE, logo=NADEEM_LOGO, error=None, access_token=short_lived_token, long_token=long_token)
+    print()
+    typewriter("Available app keys (sample): " + ", ".join(FacebookAppTokens.get_all_app_keys()), delay=0.005, color=Fore.CYAN)
+    if result.get("status") == "mock":
+        typewriter("Conversion demo: token color is green and styled.", delay=0.01, color=Fore.CYAN)
+        print_token(result.get("access_token"))
+    print()
+    typewriter("Demo complete. To run real operations you must disable SAFE_MODE and ensure you own the account.", delay=0.015, color=Fore.YELLOW)
 
 if __name__ == "__main__":
-    if CLIENT_ID.startswith("<REPLACE") or CLIENT_SECRET.startswith("<REPLACE"):
-        console.print("[bold red]ERROR:[/bold red] Set FB_CLIENT_ID and FB_CLIENT_SECRET environment variables or edit this file.", style="bold")
-        console.print("Example export commands (Linux/Mac):")
-        console.print("  export FB_CLIENT_ID=your_app_id")
-        console.print("  export FB_CLIENT_SECRET=your_app_secret")
-        console.print("Make sure the redirect URI is configured in the Facebook app settings.")
-    else:
-        console.print(Panel(Text("NADEEM Facebook OAuth demo starting (open http://localhost:5000)", justify="center"), style="bold magenta"))
-        webbrowser.open("http://localhost:5000")
-        app.run(host="0.0.0.0", port=5000, debug=False)
+    main_demo()
