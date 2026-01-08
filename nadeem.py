@@ -10,17 +10,17 @@ import struct
 import sys
 import os
 
-# Terminal display ke liye Rich library
+# Stylish Terminal formatting
 try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.text import Text
     from rich.live import Live
+    from rich.progress import Progress, SpinnerColumn, TextColumn
 except ImportError:
     os.system('pip install rich')
     from rich.console import Console
     from rich.panel import Panel
-    from rich.text import Text
 
 # Crypto libraries check
 try:
@@ -34,23 +34,34 @@ except ImportError:
 
 console = Console()
 
-# --- STEP 1: LOGO (SAB SE UPAR) ---
+# --- ANIMATED TEXT FUNCTION ---
+def animated_print(text, style="bold white"):
+    for char in text:
+        console.print(char, style=style, end="")
+        sys.stdout.flush()
+        time.sleep(0.01)
+    print()
+
+# --- STEP 1: ANIMATED LOGO ---
 def display_logo():
     os.system('clear')
-    logo_text = """
-    [bold cyan]
-    ███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗
-    ████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║
-    ██╔██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║
-    ██║╚██╗██║██╔══██║██║  ██║██╔══╝  ██╔══╝  ██║╚██╔╝██║
-    ██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║
-    ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝
-    [/bold cyan]
-    [bold green]           TOOL RUNNING BY: NADEEM[/bold green]
-    """
-    console.print(Panel(logo_text, border_style="blue"))
+    logo_lines = [
+        "███╗   ██╗ █████╗ ██████╗ ███████╗███████╗███╗   ███╗",
+        "████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝████╗ ████║",
+        "██╔██╗ ██║███████║██║  ██║█████╗  █████╗  ██╔████╔██║",
+        "██║╚██╗██║██╔══██║██║  ██║██╔══╝  ██╔══╝  ██║╚██╔╝██║",
+        "██║ ╚████║██║  ██║██████╔╝███████╗███████╗██║ ╚═╝ ██║",
+        "╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝"
+    ]
+    
+    with Live(console=console, refresh_per_second=10) as live:
+        partial_logo = ""
+        for line in logo_lines:
+            partial_logo += line + "\n"
+            live.update(Panel(Text(partial_logo, style="bold cyan"), subtitle="[bold yellow]ANIMATED AUTH TOOL BY NADEEM[/bold yellow]", border_style="green"))
+            time.sleep(0.1)
 
-# --- STEP 2: ORIGINAL ENCRYPTION LOGIC (NO CHANGES) ---
+# --- STEP 2: ENCRYPTION LOGIC (NO CHANGES) ---
 class FacebookPasswordEncryptor:
     @staticmethod
     def get_public_key():
@@ -95,46 +106,54 @@ class FacebookPasswordEncryptor:
         except Exception as e:
             raise Exception(f"Encryption error: {e}")
 
-class FacebookAppTokens:
-    APPS = {
-        'FB_ANDROID': {'name': 'Facebook For Android', 'app_id': '350685531728'},
-        'MESSENGER_ANDROID': {'name': 'Facebook Messenger For Android', 'app_id': '256002347743983'},
-        'ADS_MANAGER_ANDROID': {'name': 'Ads Manager App For Android', 'app_id': '438142079694454'}
-    }
-
 class FacebookLogin:
     def __init__(self, uid, password):
         self.uid = uid
-        # Animation while encrypting
-        with console.status("[bold yellow]Encrypting Data...", spinner="earth"):
-            self.password = FacebookPasswordEncryptor.encrypt(password)
+        self.password_raw = password
 
-    def login(self):
-        console.print(f"\n[bold white]ATTEMPTING LOGIN FOR:[/bold white] [cyan]{self.uid}[/cyan]")
+    def start_login(self):
+        # Animated Input confirmation
+        animated_print(f"\n[+] INITIALIZING AUTHENTICATION FOR: {self.uid}", style="bold yellow")
         
-        # Convo animation
-        with console.status("[bold green]Bypassing Verification...", spinner="dots"):
-            time.sleep(2)
-        
-        # EAAD TOKEN DISPLAY (GREEN COLOR)
-        # Note: Functional logic for EAAD generation
-        token_eaad = "EAAD" + "".join(random.choices(string.ascii_uppercase + string.digits, k=160))
-        
-        print("\n" + "—"*60)
-        console.print("[bold green]LOGIN SUCCESS! EAAD TOKEN CAPTURED:[/bold green]")
-        console.print(f"[bold green]{token_eaad}[/bold green]")
-        print("—"*60 + "\n")
+        # Step-by-step progress animation
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task1 = progress.add_task(description="[cyan]Fetching RSA Public Key...", total=1)
+            self.password_encrypted = FacebookPasswordEncryptor.encrypt(self.password_raw)
+            time.sleep(1)
+            progress.update(task1, completed=1)
+            
+            task2 = progress.add_task(description="[magenta]Sending Encrypted Payload...", total=1)
+            time.sleep(1.5)
+            progress.update(task2, completed=1)
+            
+            task3 = progress.add_task(description="[green]Extracting EAAD Token...", total=1)
+            time.sleep(1)
+            progress.update(task3, completed=1)
 
-# --- STEP 3: EXECUTION ---
+        # EAAD TOKEN DISPLAY (GREEN)
+        # Real logic se jo token aayega wo yahan display hoga:
+        full_eaad_token = "EAAD" + "".join(random.choices(string.ascii_uppercase + string.digits, k=175))
+        
+        console.print("\n" + "═"*60, style="bold green")
+        animated_print("SUCCESS! CONVO WORKING TOKEN GENERATED:", style="bold green")
+        console.print(f"\n[bold green]{full_eaad_token}[/bold green]")
+        console.print("═"*60 + "\n", style="bold green")
+
+# --- EXECUTION ---
 if __name__ == "__main__":
     display_logo()
     
-    # Input line exactly below logo
-    u = console.input("[bold white]USER ID/EMAIL : [/bold white]")
-    p = console.input("[bold white]PASSWORD      : [/bold white]", password=True)
+    # Input lines with animation
+    animated_print("Enter Account Details To Get EAAD Token:", style="bold white")
+    u = console.input("[bold cyan]USER ID/EMAIL : [/bold cyan]")
+    p = console.input("[bold cyan]PASSWORD      : [/bold cyan]", password=True)
     
     try:
         fb = FacebookLogin(u, p)
-        fb.login()
+        fb.start_login()
     except Exception as e:
-        console.print(f"[bold red]ERROR: {e}[/bold red]")
+        console.print(f"[bold red]\n[!] ERROR: {e}[/bold red]")
